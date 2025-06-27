@@ -1,23 +1,27 @@
-# syntax=docker/dockerfile:1
+FROM ruby:3.2-alpine
 
-FROM golang:1.24-alpine AS build
-
-# Set destination for COPY
 WORKDIR /app
 
-# Download any Go modules
-COPY container_src/go.mod ./
-RUN go mod download
+# Install minimal dependencies
+RUN apk add --no-cache build-base yaml-dev
 
-# Copy container source code
-COPY container_src/*.go ./
+# Install Rails
+RUN gem install rails --no-document
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /server
+# Create minimal Rails app
+RUN rails new . --minimal --skip-git --skip-bundle
 
-FROM scratch
-COPY --from=build /server /server
-EXPOSE 8080
+# Add tzinfo-data gem for timezone support
+RUN echo 'gem "tzinfo-data"' >> Gemfile
 
-# Run
-CMD ["/server"]
+# Install dependencies
+RUN bundle install
+
+# Generate controllers
+RUN rails generate controller Container show --skip-routes
+RUN echo "Container ID: <%= params[:id] %>" > app/views/container/show.html.erb
+RUN echo "Rails.application.routes.draw { get '/container/:id', to: 'container#show' }" > config/routes.rb
+
+EXPOSE 3000
+
+CMD ["rails", "server", "-b", "0.0.0.0"]
